@@ -1,0 +1,10 @@
+{
+  "name": "MASQR",
+  "description": "سیستەمێکی پێشکەوتوو و پرۆفیشناڵی ئامادەبوون کە کار بکات لە ڕێگەی سکانکردنی QR Code",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
