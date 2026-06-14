@@ -18,6 +18,15 @@ export function LoginPage() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Initialize device ID footprint once
+  React.useEffect(() => {
+    let dev = localStorage.getItem("MASQR_DEVICE_ID");
+    if (!dev) {
+      dev = "mobi_" + Math.random().toString(36).substring(2, 15) + "_" + Date.now().toString(36);
+      localStorage.setItem("MASQR_DEVICE_ID", dev);
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password || (!isLogin && !name)) {
@@ -37,6 +46,38 @@ export function LoginPage() {
       };
 
       if (isLogin) {
+        // 1. Check if user is a matched employee/teacher with preset email and password in Firestore
+        const matchedUser = users.find(
+          (u) =>
+            u.email?.toLowerCase().trim() === email.toLowerCase().trim() &&
+            u.password === password
+        );
+
+        if (matchedUser) {
+          const currentDeviceId = localStorage.getItem("MASQR_DEVICE_ID") || "dev_" + Date.now();
+          
+          // Enforce SINGLE device access restriction
+          if (matchedUser.deviceId && matchedUser.deviceId !== "" && matchedUser.deviceId !== currentDeviceId) {
+            toast.error("ئەم هەژمارە تەنها لەسەر یەک مۆبایل کار دەکات و پێشتر لەسەر مۆبایلێکی تر چالاککراوە! تکایە پەیوەندی بە بەڕێوەبەر بکە.", {
+              duration: 6000
+            });
+            setLoading(false);
+            return;
+          }
+
+          // Lock on first login to this specific device ID
+          if (!matchedUser.deviceId || matchedUser.deviceId === "") {
+            await store.updateUserDevice(matchedUser.id, currentDeviceId);
+            toast.success("ئەم مۆبایلە بە سەرکەوتوویی بەسترایەوە بەم هەژمارەوە.");
+          }
+
+          store.setActiveUser(matchedUser.id);
+          toast.success("بە سەرکەوتوویی چوویتە پۆرتتاڵ");
+          setLoading(false);
+          return;
+        }
+
+        // Fallback to standard Firebase authentication
         await timeoutReq(
           signInWithEmailAndPassword(auth, email, password),
           "کێشە لە هێڵی ئینتەرنێت هەیە.",

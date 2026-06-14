@@ -26,6 +26,7 @@ const defaultSettings = {
   weekendDays: ["Friday", "Saturday"],
   kioskTimeout: 10,
   enableSound: true,
+  holidays: [] as { id: string; date: string; name: string }[],
 };
 
 function getInitialState(): AppState {
@@ -37,6 +38,7 @@ function getInitialState(): AppState {
         ...parsed,
         activeUserId: parsed.activeUserId || null,
         settings: { ...defaultSettings, ...(parsed.settings || {}) },
+        auditLogs: parsed.auditLogs || [],
       };
     } catch {
       // fallback
@@ -47,6 +49,7 @@ function getInitialState(): AppState {
     records: [],
     activeUserId: null,
     settings: defaultSettings,
+    auditLogs: [],
   };
 }
 
@@ -164,6 +167,24 @@ export const store = {
 
         try {
           onSnapshot(
+            collection(db, "audit_logs"),
+            (snapshot) => {
+              const auditLogs = snapshot.docs
+                .map((d) => ({ id: d.id, ...d.data() }) as any)
+                .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+                .slice(0, 100);
+              store.setState({ auditLogs });
+            },
+            (error) => {
+              console.error("Firestore Audit Logs Error:", error);
+            },
+          );
+        } catch (e) {
+          console.error("Could not set up audit logs listeners:", e);
+        }
+
+        try {
+          onSnapshot(
             doc(db, "settings", "global"),
             (snapshot) => {
               if (snapshot.exists()) {
@@ -201,17 +222,112 @@ export const store = {
     listeners.forEach((l) => l());
   },
 
+  addAuditLog: async (action: string) => {
+    const newLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2,6)}`,
+      action,
+      timestamp: new Date().toISOString(),
+    };
+    const currentLogs = state.auditLogs || [];
+    const updatedLogs = [newLog, ...currentLogs].slice(0, 50);
+
+    store.setState({
+      auditLogs: updatedLogs,
+    });
+
+    try {
+      await setDoc(doc(db, "audit_logs", newLog.id), newLog);
+    } catch (e) {
+      console.error("Failed to add audit log to Firestore:", e);
+    }
+  },
+
   addUser: async (user: Omit<User, "id">) => {
     const newId = `u${Date.now()}`; // For users added manually (not via auth)
-    await setDoc(doc(db, "users", newId), user);
+    const newUser: User = { id: newId, ...user };
+
+    // 1. Update local state immediately for instant feedback and robustness
+    store.setState({
+      users: [...state.users, newUser],
+    });
+
+    store.addAuditLog(`زیادکردنی کەسی نوێ: ${newUser.name} (${newUser.department || "گشتی"})`);
+
+    // 2. Persist to Firestore asynchronously
+    try {
+      await setDoc(doc(db, "users", newId), newUser);
+    } catch (e) {
+      console.error("Failed to add user to Firestore, falling back to local state:", e);
+    }
+  },
+
+  resetDeviceLock: async (userId: string) => {
+    const updatedUsers = state.users.map((u) => {
+      if (u.id === userId) {
+        return { ...u, deviceId: "" };
+      }
+      return u;
+    });
+
+    store.setState({ users: updatedUsers });
+    store.addAuditLog(`سەرەتامانکردنەوەی قوفڵی ئامێری بەکارهێنەر: ${userId}`);
+
+    try {
+      await setDoc(doc(db, "users", userId), { deviceId: "" }, { merge: true });
+    } catch (e) {
+      console.error("Failed to reset device lock in Firestore:", e);
+    }
+  },
+
+  updateUserDevice: async (userId: string, deviceId: string) => {
+    const updatedUsers = state.users.map((u) => {
+      if (u.id === userId) {
+        return { ...u, deviceId };
+      }
+      return u;
+    });
+
+    store.setState({ users: updatedUsers });
+    try {
+      await setDoc(doc(db, "users", userId), { deviceId }, { merge: true });
+    } catch (e) {
+      console.error("Failed to save device footprint on Firestore:", e);
+    }
   },
 
   deleteUser: async (id: string) => {
-    await deleteDoc(doc(db, "users", id));
+    const targetUser = state.users.find((u) => u.id === id);
+    const userName = targetUser ? targetUser.name : id;
+
+    // 1. Update local state immediately
+    store.setState({
+      users: state.users.filter((u) => u.id !== id),
+    });
+
+    store.addAuditLog(`سڕینەوەی بەکارهێنەر: ${userName}`);
+
+    // 2. Delete from Firestore asynchronously
+    try {
+      await deleteDoc(doc(db, "users", id));
+    } catch (e) {
+      console.error("Failed to delete user from Firestore, falling back to local state:", e);
+    }
   },
 
   updateSettings: async (settings: any) => {
-    await setDoc(doc(db, "settings", "global"), settings, { merge: true });
+    // 1. Update local state immediately
+    store.setState({
+      settings: { ...state.settings, ...settings },
+    });
+
+    store.addAuditLog(`نوێکردنەوەی ڕێکخستنەکانی سیتەم`);
+
+    // 2. Save to Firestore asynchronously
+    try {
+      await setDoc(doc(db, "settings", "global"), settings, { merge: true });
+    } catch (e) {
+      console.error("Failed to update settings in Firestore, falling back to local state:", e);
+    }
   },
 
   handleScan: async (
@@ -236,13 +352,24 @@ export const store = {
       "Thursday",
       "Friday",
       "Saturday",
+      "Sunday",
     ];
     const currentDayName = dayNames[now.getDay()];
 
     if (state.settings?.weekendDays?.includes(currentDayName)) {
       return {
         success: false,
-        message: "ئەمڕۆ پشووی فەرمییە، ناتوانیت دەوام تۆمار بکەیت!",
+        message: "ئەمڕۆ پشووی کۆتایی هەفتەیە، ناتوانیت دەوام تۆمار بکەیت!",
+        user,
+      };
+    }
+
+    const todayDateStr = now.toISOString().split("T")[0];
+    const matchedHoliday = state.settings?.holidays?.find(h => h.date === todayDateStr);
+    if (matchedHoliday) {
+      return {
+        success: false,
+        message: `ئەمڕۆ بەهۆی (${matchedHoliday.name}) پشووی فەرمییە، ناتوانیت دەوام تۆمار بکەیت!`,
         user,
       };
     }
@@ -267,7 +394,19 @@ export const store = {
       }
 
       const updatedRecord = { ...existingRecord, checkOut: now.toISOString() };
-      await setDoc(doc(db, "records", existingRecord.id), updatedRecord);
+
+      // Update local state immediately
+      store.setState({
+        records: state.records.map((r) => r.id === existingRecord.id ? updatedRecord : r),
+      });
+
+      store.addAuditLog(`تۆمارکردنی چوونی دەرەوە: ${user.name} (${user.department})`);
+
+      try {
+        await setDoc(doc(db, "records", existingRecord.id), updatedRecord);
+      } catch (e) {
+        console.error("Failed to update record on Firestore:", e);
+      }
 
       return {
         success: true,
@@ -285,7 +424,18 @@ export const store = {
         status: isLate ? "LATE" : "PRESENT",
       };
 
-      await setDoc(doc(db, "records", newId), newRecord);
+      // Update local state immediately
+      store.setState({
+        records: [...state.records, newRecord],
+      });
+
+      store.addAuditLog(`تۆمارکردنی هاتنی دەوام: ${user.name} (${user.department}) - ${isLate ? "دواکەوتوو" : "ئامادەبوو"}`);
+
+      try {
+        await setDoc(doc(db, "records", newId), newRecord);
+      } catch (e) {
+        console.error("Failed to save record to Firestore:", e);
+      }
 
       return {
         success: true,

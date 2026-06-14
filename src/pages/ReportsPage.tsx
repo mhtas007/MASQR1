@@ -15,7 +15,8 @@ import {
   Hexagon,
   Mail,
   Sparkles,
-  BarChart2
+  BarChart2,
+  Send,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
@@ -124,6 +125,85 @@ export function ReportsPage() {
     toast.success("ڕاپۆرت نێردرا بۆ ئیمەیڵی بەڕێوەبەر", { icon: "📧" });
   };
 
+  const handleSendTelegram = async () => {
+    if (!settings?.telegramBotToken || !settings?.telegramChatId) {
+      toast.error("تکایە سەرەتا تۆکنی بۆت و ناسنامەی چاتی تێلێگرام لە ڕێکخستنەکان کارا بکە!", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    const orgName = settings.orgName || "قوتابخانەی نموونەیی";
+    
+    // Calculate stats
+    const totalCount = filteredRecords.length;
+    const presentCount = stats.present;
+    const lateCount = stats.late;
+    const leaveCount = stats.leave;
+    const absentCount = stats.absent;
+
+    // Use markdown escaping or keep it text formatted beautifully
+    let msg = `📋 ڕاپۆرتی ئامادەبوونی دەوامی ڕۆژانە\n`;
+    msg += `------------------------------------------\n`;
+    msg += `🏢 دامەزراوە: ${orgName}\n`;
+    msg += `📅 بەروار: ${filterDate}\n\n`;
+
+    msg += `📊 ئاماری گشتی ئەمڕۆ: \n`;
+    msg += `• سەرجەم: ${totalCount} کەس\n`;
+    msg += `• ئامادەبووی تەواو: ${presentCount} کەس (${((presentCount / Math.max(1, totalCount)) * 100).toFixed(0)}%)\n`;
+    msg += `• دواکەوتوو: ${lateCount} کەس\n`;
+    msg += `• مۆڵەت: ${leaveCount} کەس\n`;
+    msg += `• غایبەکۆڵ: ${absentCount} کەس\n\n`;
+
+    msg += `📋 تۆماری ئامادەبووان:\n`;
+    
+    const portion = filteredRecords.slice(0, 30);
+    portion.forEach((r, idx) => {
+      const idxStr = (idx + 1).toLocaleString("ku-IQ");
+      const checkInTime = r.checkIn 
+        ? new Date(r.checkIn).toLocaleTimeString("ku-IQ", { hour: "2-digit", minute: "2-digit" })
+        : "";
+      const statusText = getStatusLabel(r.status);
+      msg += `${idxStr}. ${r.user.name} [${getCategoryLabel(r.user.category)}] ➔ ${statusText} ${checkInTime ? `(${checkInTime})` : ""}\n`;
+    });
+
+    if (filteredRecords.length > 30) {
+      msg += `...و ${filteredRecords.length - 30} تۆماری تر لادراوە\n`;
+    }
+
+    msg += `\n🤖 نێردراوە لە ڕێگەی سیستەمی ئامادەبوونی فەرمی MASQR`;
+
+    const loadingToast = toast.loading("پەیوەستبوون بە سێرڤەری تێلێگرام...");
+
+    try {
+      const resp = await fetch(`https://api.telegram.org/bot${settings.telegramBotToken}/sendMessage`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          chat_id: settings.telegramChatId,
+          text: msg,
+        })
+      });
+
+      toast.dismiss(loadingToast);
+
+      if (resp.ok) {
+        toast.success("ڕاپۆرت بەسەرکەوتوویی بۆ کەناڵی تێلێگرام نێردرا!", { icon: "🚀", duration: 4000 });
+        import("../store").then(({ store }) => {
+          store.addAuditLog(`ڕاپۆرتی دەوامی ڕۆژی ${filterDate} هەناردەی تێلێگرام کرا`);
+        });
+      } else {
+        const errorData = await resp.json();
+        toast.error(`نەتوانرا بنێردرێت: ${errorData.description || "تۆکنی بۆت یان چات ئایدی نادروستە"}`);
+      }
+    } catch {
+      toast.dismiss(loadingToast);
+      toast.error("هەڵە لە پەیوەستبوون بە تێلێگرام، ئینتەرنێتەکەت بپشکنە");
+    }
+  };
+
   const setPresetDate = (daysAgo: number) => {
     const d = new Date();
     d.setDate(d.getDate() - daysAgo);
@@ -159,6 +239,14 @@ export function ReportsPage() {
             className="flex items-center justify-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 px-5 py-3.5 rounded-[1.5rem] font-black text-sm transition-all shadow-sm"
           >
             <Mail className="w-5 h-5" />
+          </button>
+          <button
+            onClick={handleSendTelegram}
+            className="flex items-center justify-center gap-2 bg-sky-500 hover:bg-sky-600 text-white px-5 py-3.5 rounded-[1.5rem] font-black text-sm transition-all shadow-md shadow-sky-500/15 hover:shadow-lg active:scale-95 group"
+            title="ناردنی ڕاپۆرت بۆ تێلێگرام"
+          >
+            <Send className="w-5 h-5 group-hover:scale-110 group-hover:rotate-12 transition-transform" />
+            <span className="hidden sm:inline">تێلێگرام</span>
           </button>
           <button
             onClick={exportCSV}

@@ -14,7 +14,10 @@ import {
   Upload,
   Palette,
   ShieldAlert,
-  Server
+  Server,
+  Calendar,
+  Plus,
+  Send,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -27,14 +30,43 @@ export function SettingsPage() {
     kioskTimeout: 10,
     enableSound: true,
     autoBackup: false,
-    themeColor: "indigo"
+    themeColor: "indigo",
+    holidays: [] as { id: string; date: string; name: string }[],
+    telegramBotToken: "",
+    telegramChatId: "",
+    enableTelegramNotify: false,
   });
+
+  const [newHolidayName, setNewHolidayName] = useState("");
+  const [newHolidayDate, setNewHolidayDate] = useState("");
+
+  const currentYear = new Date().getFullYear();
+  const hPresets = [
+    { name: "سەری ساڵی زاینی", month: "01", day: "01" },
+    { name: "یادی کۆماری کوردستان", month: "01", day: "22" },
+    { name: "ڕاپەڕینی گەلی کوردستان", month: "03", day: "05" },
+    { name: "یادی کیمیابارانی هەڵەبجە", month: "03", day: "16" },
+    { name: "جەژنی نەورۆزی نەتەوەیی", month: "03", day: "21" },
+    { name: "جەژنی جیهانی کرێکاران", month: "05", day: "01" },
+    { name: "ڕۆژی دامەزراندنی حکومەتی هەرێم", month: "05", day: "15" },
+    { name: "ڕاگەیاندنی کۆماری عێراق", month: "07", day: "14" },
+    { name: "ڕۆژی سوپای عێراق", month: "01", day: "06" },
+  ];
 
   useEffect(() => {
     if (settings) {
       setFormData({
-        ...formData,
-        ...settings,
+        orgName: settings.orgName || "",
+        lateTime: settings.lateTime || "",
+        weekendDays: settings.weekendDays || ["Friday", "Saturday"],
+        kioskTimeout: settings.kioskTimeout || 10,
+        enableSound: settings.enableSound !== undefined ? settings.enableSound : true,
+        autoBackup: (settings as any).autoBackup || false,
+        themeColor: (settings as any).themeColor || "indigo",
+        holidays: settings.holidays || [],
+        telegramBotToken: settings.telegramBotToken || "",
+        telegramChatId: settings.telegramChatId || "",
+        enableTelegramNotify: settings.enableTelegramNotify || false,
       });
     }
   }, [settings]);
@@ -70,7 +102,7 @@ export function SettingsPage() {
   };
 
   const handleMockImport = () => {
-     toast.info("تکایە فایلی ماسکیو ئاڕ جەیسۆن هەڵبژێرە");
+     toast("تکایە فایلی ماسکیو ئاڕ جەیسۆن هەڵبژێرە", { icon: "ℹ️" });
   };
 
   const toggleWeekendDay = (day: string) => {
@@ -82,6 +114,39 @@ export function SettingsPage() {
         return { ...prev, weekendDays: [...days, day] };
       }
     });
+  };
+
+  const addHoliday = (name: string, date: string) => {
+    if (!name || !date) {
+      toast.error("تکایە ناو و بەرواری پشوو دەستنیشان بکە!");
+      return;
+    }
+    const holidays = formData.holidays || [];
+    if (holidays.some((h) => h.date === date)) {
+      toast.error("ئەم بەروارە پێشتر وەک پشوو تۆمار کراوە!");
+      return;
+    }
+    const updatedHolidays = [
+      ...holidays,
+      { id: `h-${Date.now()}-${Math.random().toString(35).substring(2, 6)}`, date, name },
+    ].sort((a, b) => a.date.localeCompare(b.date));
+
+    setFormData((prev) => ({
+      ...prev,
+      holidays: updatedHolidays,
+    }));
+    setNewHolidayName("");
+    setNewHolidayDate("");
+    toast.success(`پشووی "${name}" زیاکرا`);
+  };
+
+  const removeHoliday = (id: string, name: string) => {
+    const holidays = formData.holidays || [];
+    setFormData((prev) => ({
+      ...prev,
+      holidays: holidays.filter((h) => h.id !== id),
+    }));
+    toast.success(`پشووی "${name}" لادرا`);
   };
 
   const daysOfWeek = [
@@ -323,10 +388,205 @@ export function SettingsPage() {
             </div>
           </div>
 
-          <div className="pt-8 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+          {/* Telegram Notifications Configuration */}
+          <div className="pt-8 border-t border-gray-150 dark:border-gray-850 space-y-6">
+            <div>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2 mb-2">
+                <Send className="w-6 h-6 text-sky-500" />
+                ڕێکخستنی ناردنی ڕاپۆرت بۆ تێلێگرام (Telegram Integration)
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-semibold">
+                زانیارییەکانی بۆتی تێلێگرام بنووسە بۆ بەدەستهێنانی ڕاپۆرتی ئامادەبوونی ڕۆژانە یان ئاگادارکردنەوە ڕاستەوخۆکان بۆ کەناڵ یان گرووپی گشتی و تایبەتی تێلێگرام.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-sky-50/20 dark:bg-sky-950/10 p-6 rounded-[2rem] border border-sky-100 dark:border-sky-900/30">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-gray-700 dark:text-gray-300">تۆکنی بۆتی تێلێگرام (Bot Token)</label>
+                <input
+                  type="text"
+                  value={formData.telegramBotToken}
+                  onChange={(e) => setFormData({ ...formData, telegramBotToken: e.target.value })}
+                  placeholder="123456789:ABCdefGhI_J..."
+                  className="w-full bg-white dark:bg-gray-800 border-2 border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:border-sky-500 rounded-xl px-4 py-3 outline-none text-xs font-mono font-bold text-gray-900 dark:text-white transition-all shadow-sm"
+                  dir="ltr"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-black text-gray-700 dark:text-gray-300">ناسنامەی چاتی تێلێگرام (Chat ID)</label>
+                <input
+                  type="text"
+                  value={formData.telegramChatId}
+                  onChange={(e) => setFormData({ ...formData, telegramChatId: e.target.value })}
+                  placeholder="-100123456789 یان ناسنامەیەکی کورت"
+                  className="w-full bg-white dark:bg-gray-800 border-2 border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:border-sky-500 rounded-xl px-4 py-3 outline-none text-xs font-mono font-bold text-gray-900 dark:text-white transition-all shadow-sm"
+                  dir="ltr"
+                />
+              </div>
+
+              <div className="flex items-center pt-8">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={formData.enableTelegramNotify}
+                    onChange={(e) => setFormData({ ...formData, enableTelegramNotify: e.target.checked })}
+                    className="w-5 h-5 accent-sky-500 rounded"
+                  />
+                  <div>
+                    <span className="text-sm font-black text-gray-700 dark:text-gray-300">ناردنی خۆکارانەی ڕاپۆرت</span>
+                    <p className="text-[10px] text-gray-500 font-bold">لەکاتی وەرگرتنی سکانی نوێ پەیام بنێرە</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Official Holidays Management Section */}
+          <div className="pt-8 border-t border-gray-150 dark:border-gray-850 space-y-6">
+            <div>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2 mb-2">
+                <CalendarDays className="w-6 h-6 text-indigo-500" />
+                ساڵنامەی جەژن و پشووە فەرمییەکان
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-semibold">
+                ڕۆژانی پشووی فەرمی و نیشتمانی لە ساڵی {currentYear}دا دياری بکە بۆ وەستاندنی ئۆتۆماتیکی دەوام و نیشاندانی تێبینی لەسەر ڕاپۆرتەکان و تۆماری کیۆسک.
+              </p>
+            </div>
+
+            {/* Quick Presets Grid */}
+            <div className="bg-gradient-to-br from-indigo-50/50 to-indigo-100/30 dark:from-indigo-950/20 dark:to-indigo-900/10 rounded-[2rem] p-6 border border-indigo-100/50 dark:border-indigo-900/45">
+              <span className="text-xs font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-wider block mb-4">
+                💡 پێشنیاری پشوو فەرمییەکان بۆ هەرێمی کوردستان (کرتە بکە بۆ زیادکردنی خێرا)
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {hPresets.map((preset, idx) => {
+                  const presetDate = `${currentYear}-${preset.month}-${preset.day}`;
+                  const isAlreadyAdded = formData.holidays?.some(h => h.date === presetDate);
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      disabled={isAlreadyAdded}
+                      onClick={() => addHoliday(preset.name, presetDate)}
+                      className={`flex items-center justify-between p-3.5 rounded-xl text-right transition-all text-xs font-bold leading-snug border ${
+                        isAlreadyAdded
+                          ? "bg-emerald-50/50 border-emerald-100 text-emerald-700 dark:bg-emerald-950/20 dark:border-emerald-900/40 dark:text-emerald-400 opacity-60 cursor-not-allowed"
+                          : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-800 text-gray-700 dark:text-gray-300 shadow-sm hover:shadow active:scale-95"
+                      }`}
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-black">{preset.name}</span>
+                        <span className="text-[10px] font-mono opacity-70" dir="ltr">{presetDate}</span>
+                      </div>
+                      <Plus className={`w-4 h-4 shrink-0 mr-1 ${isAlreadyAdded ? "text-emerald-500" : "text-indigo-500"}`} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Add Custom Holiday form and List View */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Form column */}
+              <div className="bg-gray-50/50 dark:bg-gray-800/10 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-800 space-y-4 h-fit">
+                <span className="text-sm font-black text-gray-800 dark:text-gray-200 block border-b pb-2">
+                  ✍️ زیادکردنی پشووی نوێی نیشتمانی
+                </span>
+                
+                <div className="space-y-2">
+                  <label className="text-xs font-black text-gray-500 dark:text-gray-400">ناوی بۆنە فەرمییەکە</label>
+                  <input
+                    type="text"
+                    value={newHolidayName}
+                    onChange={(e) => setNewHolidayName(e.target.value)}
+                    className="w-full bg-white dark:bg-gray-800 border-2 border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:border-indigo-500 rounded-xl px-4 py-3 outline-none text-sm font-bold text-gray-900 dark:text-white transition-all shadow-sm"
+                    placeholder="نموونە: جەژنی نەورۆز"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-black text-gray-500 dark:text-gray-400">بەرواری پشوو</label>
+                  <input
+                    type="date"
+                    value={newHolidayDate}
+                    onChange={(e) => setNewHolidayDate(e.target.value)}
+                    className="w-full bg-white dark:bg-gray-800 border-2 border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:border-indigo-500 rounded-xl px-4 py-3 outline-none text-sm font-mono font-bold text-gray-900 dark:text-white transition-all shadow-sm"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => addHoliday(newHolidayName, newHolidayDate)}
+                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-505 text-white py-3 px-4 rounded-xl font-black text-sm transition-all shadow-md hover:shadow-lg active:scale-95 btn-add-holiday"
+                  style={{ backgroundColor: formData.themeColor === 'indigo' ? undefined : formData.themeColor === 'rose' ? '#e11d48' : formData.themeColor === 'emerald' ? '#059669' : '#0891b2' }}
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>تۆمارکردنی پشوو</span>
+                </button>
+              </div>
+
+              {/* List column */}
+              <div className="lg:col-span-2 space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                <span className="text-sm font-black text-gray-800 dark:text-gray-200 block border-b pb-2">
+                  🌟 لیستی بۆنە فەرمی و نیشتمانییەکانی ساڵ ({formData.holidays?.length || 0})
+                </span>
+
+                {(!formData.holidays || formData.holidays.length === 0) ? (
+                  <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-150 dark:border-gray-800 rounded-[2rem] text-gray-400 dark:text-gray-650">
+                    <Calendar className="w-12 h-12 mb-3 stroke-[1.5]" />
+                    <p className="text-sm font-bold">تائێستا هیچ ڕۆژێکی فەرمی پشوو تۆمار نەکراوە!</p>
+                    <p className="text-xs font-semibold opacity-70 mt-1">بەکارهێنانی بەشەکانی سەرەوە بۆ دامەزراندنی پشووی نوێ.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {formData.holidays.map((holiday) => {
+                      const hDate = new Date(holiday.date);
+                      const formattedDateStr = hDate.toLocaleDateString("ku-IQ", {
+                        weekday: "long",
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      });
+                      return (
+                        <div
+                          key={holiday.id}
+                          className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-[1.2rem] border border-gray-100 dark:border-gray-700/80 shadow-sm relative group hover:shadow-md hover:border-indigo-100 dark:hover:border-indigo-900 transition-all duration-300"
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-black text-sm text-gray-900 dark:text-white leading-tight mb-1">
+                              {holiday.name}
+                            </span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold mb-0.5">
+                              {formattedDateStr}
+                            </span>
+                            <span className="text-[10px] text-indigo-500 font-mono font-bold" dir="ltr">
+                              {holiday.date}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => removeHoliday(holiday.id, holiday.name)}
+                            className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-[0.8rem] transition-all absolute left-3 top-1/2 -translate-y-1/2 sm:opacity-0 group-hover:opacity-100 focus:opacity-100 shadow-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-rose-100 dark:hover:border-rose-950"
+                            title="سڕینەوەی پشوو"
+                          >
+                            <Trash2 className="w-4.5 h-4.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-8 border-t border-gray-100 dark:border-gray-800 flex justify-end animate-bounce-subtle">
             <button
               type="submit"
               className="flex items-center gap-2 bg-gray-900 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white px-8 py-5 rounded-[1.5rem] font-black text-lg transition-all shadow-xl shadow-gray-900/20 dark:shadow-indigo-900/40 hover:shadow-2xl hover:-translate-y-1 active:scale-95"
+              style={{ backgroundColor: formData.themeColor === 'indigo' ? undefined : formData.themeColor === 'rose' ? '#e11d48' : formData.themeColor === 'emerald' ? '#059669' : '#0891b2' }}
             >
               <Save className="w-6 h-6" />
               پاشەکەوتکردنی گۆڕانکارییەکان
@@ -401,19 +661,36 @@ export function SettingsPage() {
             <ShieldAlert className="w-5 h-5 inline-block ml-2 text-indigo-500" />
             تۆماری چالاکییەکانی سیستم (Audit Log)
          </h3>
-         <div className="space-y-3">
-            <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl text-sm font-bold border border-gray-100 dark:border-gray-800">
-               <span className="text-gray-700 dark:text-gray-300">چوونە ژوورەوەی ئەدمین سەرکەوتوو بوو</span>
-               <span className="text-gray-400 font-mono">10:32 AM</span>
-            </div>
-            <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl text-sm font-bold border border-gray-100 dark:border-gray-800">
-               <span className="text-gray-700 dark:text-gray-300">هەناردەکردنی داتابەیس کرێیەکی نوێ</span>
-               <span className="text-gray-400 font-mono">یەکشەممە</span>
-            </div>
-            <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl text-sm font-bold border border-gray-100 dark:border-gray-800">
-               <span className="text-gray-700 dark:text-gray-300">سکانەری کیۆسک کاراکرا</span>
-               <span className="text-gray-400 font-mono">١/٥/٢٠٢٤</span>
-            </div>
+         <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+            {(() => {
+               const stateLogs = store.getState().auditLogs || [];
+               const defaultLogs = [
+                  { id: "def-1", action: "سیستم بە سەرکەوتوویی جێگیر کرا و هاوکات کرا", timestamp: new Date(Date.now() - 10 * 60000).toISOString() },
+                  { id: "def-2", action: "هەناردەکردنی سەرکەوتووانەی پاشکۆی داتابەیس", timestamp: new Date(Date.now() - 24 * 3600000).toISOString() },
+                  { id: "def-3", action: "سکانەری کیۆسکی سەرەکی کارا کرا", timestamp: new Date(Date.now() - 48 * 3600000).toISOString() }
+               ];
+               const logsToRender = stateLogs.length > 0 ? stateLogs : defaultLogs;
+               
+               return logsToRender.map((log) => {
+                  let formattedTime = "";
+                  try {
+                     const d = new Date(log.timestamp);
+                     formattedTime = d.toLocaleTimeString("ku-IQ", { hour: "2-digit", minute: "2-digit" }) + " | " + d.toLocaleDateString("ku-IQ", { weekday: "short", day: "numeric", month: "numeric" });
+                  } catch {
+                     formattedTime = log.timestamp;
+                  }
+                  
+                  return (
+                     <div key={log.id} className="flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/10 p-4 rounded-xl text-sm font-bold border border-gray-100/50 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                        <span className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                           <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                           {log.action}
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 font-mono" dir="ltr">{formattedTime}</span>
+                     </div>
+                  );
+               });
+            })()}
          </div>
       </div>
     </div>

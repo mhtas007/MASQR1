@@ -10,6 +10,9 @@ export interface User {
   department: string;
   avatar?: string;
   phone?: string;
+  email?: string;
+  password?: string;
+  deviceId?: string;
 }
 
 export type Status = "PRESENT" | "ABSENT" | "LATE" | "LEAVE";
@@ -29,6 +32,16 @@ export interface Settings {
   weekendDays?: string[];
   kioskTimeout?: number; // In seconds
   enableSound?: boolean;
+  holidays?: { id: string; date: string; name: string }[];
+  telegramBotToken?: string;
+  telegramChatId?: string;
+  enableTelegramNotify?: boolean;
+}
+
+export interface AuditLog {
+  id: string;
+  action: string;
+  timestamp: string; // ISO String
 }
 
 export interface AppState {
@@ -36,4 +49,5 @@ export interface AppState {
   records: AttendanceRecord[];
   activeUserId: string | null;
   settings: Settings;
+  auditLogs?: AuditLog[];
 }

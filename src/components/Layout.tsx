@@ -10,8 +10,9 @@ import {
   Hexagon,
   Power,
   Settings,
+  WifiOff,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -27,6 +28,20 @@ export function Layout() {
   const location = useLocation();
   const { users, activeUserId } = useAppStore();
   const activeUser = users.find((u) => u.id === activeUserId);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   if (!activeUser) return null;
 
@@ -130,45 +145,53 @@ export function Layout() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 print:overflow-visible print:h-auto">
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:block w-72 shrink-0 h-full z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-none print:hidden">
-        {sidebar}
-      </aside>
-
-      {/* Mobile Menu Button */}
-      <div className="md:hidden fixed top-4 right-4 z-50 print:hidden">
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
-        >
-          {mobileOpen ? (
-            <X className="w-6 h-6" />
-          ) : (
-            <Menu className="w-6 h-6" />
-          )}
-        </button>
-      </div>
-
-      {/* Mobile Sidebar */}
-      {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-40 flex print:hidden">
-          <div
-            className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-          />
-          <div className="relative w-[80%] max-w-sm h-full shadow-2xl">
-            {sidebar}
-          </div>
+    <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 print:overflow-visible print:h-auto">
+      {isOffline && (
+        <div className="bg-amber-500 text-white font-black text-xs md:text-sm py-2 px-4 text-center flex items-center justify-center gap-2 animate-in slide-in-from-top duration-300 print:hidden shrink-0 z-50 shadow-sm">
+          <WifiOff className="w-4.5 h-4.5" />
+          <span>تۆ ئێستا بەبێ هێڵ (Offline) کار دەکەیت. سەرجەم داتا و سکاتی کیۆسک پارێزراون و خۆکار هاوکات دەبنەوە.</span>
         </div>
       )}
+      <div className="flex flex-1 h-full overflow-hidden print:overflow-visible print:h-auto relative">
+        {/* Desktop Sidebar */}
+        <aside className="hidden md:block w-72 shrink-0 h-full z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-none print:hidden">
+          {sidebar}
+        </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 h-full overflow-y-auto w-full relative print:overflow-visible print:h-auto print:absolute print:inset-0">
-        <div className="p-6 md:p-8 lg:p-10 max-w-7xl mx-auto min-h-full print:p-0">
-          <Outlet />
+        {/* Mobile Menu Button */}
+        <div className="md:hidden fixed top-4 right-4 z-50 print:hidden">
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
+          >
+            {mobileOpen ? (
+              <X className="w-6 h-6" />
+            ) : (
+              <Menu className="w-6 h-6" />
+            )}
+          </button>
         </div>
-      </main>
+
+        {/* Mobile Sidebar */}
+        {mobileOpen && (
+          <div className="md:hidden fixed inset-0 z-40 flex print:hidden">
+            <div
+              className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm"
+              onClick={() => setMobileOpen(false)}
+            />
+            <div className="relative w-[80%] max-w-sm h-full shadow-2xl">
+              {sidebar}
+            </div>
+          </div>
+        )}
+
+        {/* Main Content */}
+        <main className="flex-1 h-full overflow-y-auto w-full relative print:overflow-visible print:h-auto print:absolute print:inset-0">
+          <div className="p-6 md:p-8 lg:p-10 max-w-7xl mx-auto min-h-full print:p-0">
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
