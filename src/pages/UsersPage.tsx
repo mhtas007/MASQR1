@@ -96,7 +96,7 @@ export function UsersPage() {
     toast.success("بە سەرکەوتوویی هەناردە کرا بە فایلی Excel", { icon: "📊" });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.department)
       return toast.error("تکایە هەموو زانیاریەکان پڕبکەرەوە");
@@ -113,13 +113,19 @@ export function UsersPage() {
       password: finalPassword,
     };
 
-    store.addUser(submissionData as any);
-    toast.success(
-      formData.email
-        ? `بەکارهێنەر زیاد کرا! پاسۆردی خۆکار: ${finalPassword}`
-        : "بەکارهێنەر زیاد کرا بە سەرکەوتوویی",
-      { duration: 6000 }
-    );
+    try {
+      await store.addUser(submissionData as any);
+      toast.success(
+        formData.email
+          ? `بەکارهێنەر زیاد کرا! پاسۆردی خۆکار: ${finalPassword}`
+          : "بەکارهێنەر زیاد کرا بە سەرکەوتوویی",
+        { duration: 6000 }
+      );
+    } catch (e) {
+      toast.error("کێشەیەک ڕوویدا لە خەزنکردندا، دڵنیابە لە هێڵی ئینتەرنێت و فایربەیس");
+      return; 
+    }
+    
     setIsModalOpen(false);
     setFormData({
       name: "",

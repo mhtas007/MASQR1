@@ -73,6 +73,7 @@ export default function App() {
         </p>
         <button
           onClick={() => {
+            store.setActiveUser(null);
             import("firebase/auth").then(({ signOut }) => {
               import("./lib/firebase").then(({ auth }) => {
                 signOut(auth);

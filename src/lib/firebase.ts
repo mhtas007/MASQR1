@@ -15,6 +15,9 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
+export const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+export const secondaryAuth = getAuth(secondaryApp);
+
 // Enable robust native offline storage with auto synchronization
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({

@@ -82,6 +82,11 @@ export function UserPortal() {
       })
     );
     setSecondsLeft(10);
+    
+    // Vibrate device to alert user the barcode is fully ready
+    if ("vibrate" in navigator) {
+      navigator.vibrate([100, 50, 100]);
+    }
 
     const interval = setInterval(() => {
       setSecondsLeft((prev) => {
@@ -169,6 +174,8 @@ export function UserPortal() {
   };
 
   const handleLogout = () => {
+    // Clear manual active state
+    store.setActiveUser(null);
     import("firebase/auth").then(({ signOut }) => {
       import("../lib/firebase").then(({ auth }) => {
         signOut(auth);

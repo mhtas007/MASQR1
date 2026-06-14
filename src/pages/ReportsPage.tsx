@@ -142,36 +142,42 @@ export function ReportsPage() {
     const leaveCount = stats.leave;
     const absentCount = stats.absent;
 
-    // Use markdown escaping or keep it text formatted beautifully
-    let msg = `📋 ڕاپۆرتی ئامادەبوونی دەوامی ڕۆژانە\n`;
-    msg += `------------------------------------------\n`;
-    msg += `🏢 دامەزراوە: ${orgName}\n`;
-    msg += `📅 بەروار: ${filterDate}\n\n`;
+    // Use HTML formatting for a highly professional Telegram report
+    let msg = `<b>📑 ڕاپۆرتی ئامادەبوونی دەوامی ڕۆژانە</b>\n\n`;
+    msg += `<b>🏛 دامەزراوە:</b> ${orgName}\n`;
+    msg += `<b>📅 بەروار:</b> <code>${filterDate}</code>\n\n`;
 
-    msg += `📊 ئاماری گشتی ئەمڕۆ: \n`;
-    msg += `• سەرجەم: ${totalCount} کەس\n`;
-    msg += `• ئامادەبووی تەواو: ${presentCount} کەس (${((presentCount / Math.max(1, totalCount)) * 100).toFixed(0)}%)\n`;
-    msg += `• دواکەوتوو: ${lateCount} کەس\n`;
-    msg += `• مۆڵەت: ${leaveCount} کەس\n`;
-    msg += `• غایبەکۆڵ: ${absentCount} کەس\n\n`;
+    msg += `<b>📊 ئاماری گشتی ئەمڕۆ:</b>\n`;
+    msg += `👥 <b>سەرجەم:</b> ${totalCount} کەس\n`;
+    msg += `✅ <b>ئامادەبوو:</b> ${presentCount} کەس <i>(${((presentCount / Math.max(1, totalCount)) * 100).toFixed(0)}%)</i>\n`;
+    msg += `⏳ <b>دواکەوتوو:</b> ${lateCount} کەس\n`;
+    msg += `📝 <b>مۆڵەت:</b> ${leaveCount} کەس\n`;
+    msg += `❌ <b>غایب:</b> ${absentCount} کەس\n\n`;
 
-    msg += `📋 تۆماری ئامادەبووان:\n`;
+    msg += `<b>📋 لیستی تۆماری کارمەندان:</b>\n`;
     
-    const portion = filteredRecords.slice(0, 30);
+    // Create a beautiful grouped list
+    const portion = filteredRecords.slice(0, 40);
     portion.forEach((r, idx) => {
       const idxStr = (idx + 1).toLocaleString("ku-IQ");
       const checkInTime = r.checkIn 
         ? new Date(r.checkIn).toLocaleTimeString("ku-IQ", { hour: "2-digit", minute: "2-digit" })
         : "";
-      const statusText = getStatusLabel(r.status);
-      msg += `${idxStr}. ${r.user.name} [${getCategoryLabel(r.user.category)}] ➔ ${statusText} ${checkInTime ? `(${checkInTime})` : ""}\n`;
+      
+      let statusIcon = "✅";
+      if(r.status === "LATE") statusIcon = "⏳";
+      if(r.status === "LEAVE") statusIcon = "📝";
+      if(r.status === "ABSENT") statusIcon = "❌";
+
+      msg += `${statusIcon} <b>${r.user.name}</b> — <i>${getCategoryLabel(r.user.category)}</i>\n`;
+      msg += `      └ دۆخ: <code>${getStatusLabel(r.status)}</code> ${checkInTime ? `| کات: <code>${checkInTime}</code>` : ""}\n`;
     });
 
-    if (filteredRecords.length > 30) {
-      msg += `...و ${filteredRecords.length - 30} تۆماری تر لادراوە\n`;
+    if (filteredRecords.length > 40) {
+      msg += `\n<i>...و ${filteredRecords.length - 40} تۆماری تر بوونی هەیە.</i>\n`;
     }
 
-    msg += `\n🤖 نێردراوە لە ڕێگەی سیستەمی ئامادەبوونی فەرمی MASQR`;
+    msg += `\n<a href="https://masqr-app.firebaseapp.com">🛡 سیستەمی ئامادەبوونی MASQR</a>`;
 
     const loadingToast = toast.loading("پەیوەستبوون بە سێرڤەری تێلێگرام...");
 
@@ -184,6 +190,8 @@ export function ReportsPage() {
         body: JSON.stringify({
           chat_id: settings.telegramChatId,
           text: msg,
+          parse_mode: "HTML",
+          disable_web_page_preview: true
         })
       });
 

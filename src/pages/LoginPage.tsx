@@ -5,17 +5,14 @@ import { Hexagon, Lock, Mail, User as UserIcon, Loader2 } from "lucide-react";
 import { auth, db } from "../lib/firebase";
 import {
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import toast from "react-hot-toast";
 
 export function LoginPage() {
   const { users } = useAppStore();
-  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Initialize device ID footprint once
@@ -29,7 +26,7 @@ export function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password || (!isLogin && !name)) {
+    if (!email || !password) {
       toast.error("تکایە سەرجەم خانەکان پڕبکەرەوە");
       return;
     }
@@ -45,13 +42,12 @@ export function LoginPage() {
         ]);
       };
 
-      if (isLogin) {
-        // 1. Check if user is a matched employee/teacher with preset email and password in Firestore
-        const matchedUser = users.find(
-          (u) =>
-            u.email?.toLowerCase().trim() === email.toLowerCase().trim() &&
-            u.password === password
-        );
+      // 1. Check if user is a matched employee/teacher with preset email and password in Firestore
+      const matchedUser = users.find(
+        (u) =>
+          u.email?.toLowerCase().trim() === email.toLowerCase().trim() &&
+          u.password === password
+      );
 
         if (matchedUser) {
           const currentDeviceId = localStorage.getItem("MASQR_DEVICE_ID") || "dev_" + Date.now();
@@ -83,28 +79,6 @@ export function LoginPage() {
           "کێشە لە هێڵی ئینتەرنێت هەیە.",
         );
         toast.success("بە سەرکەوتوویی چوویتە ژوورەوە");
-      } else {
-        const userCredential = await timeoutReq(
-          createUserWithEmailAndPassword(auth, email, password),
-          "کێشە لە دروستکردنی هەژمار هەیە. کات تەواو بوو.",
-        );
-
-        // If users array is empty, this is the first user -> ADMIN
-        const isFirstUser = users.length === 0;
-        const role = isFirstUser ? "ADMIN" : "USER";
-
-        await timeoutReq(
-          setDoc(doc(db, "users", userCredential.user.uid), {
-            name,
-            role,
-            category: "EMPLOYEE",
-            department: isFirstUser ? "بەڕێوەبردن" : "گشتی",
-          }),
-          "تکایە داتابەیسی Firestore چالاک بکە لە Firebase Console بۆ ئەوەی داتاکە خەزن ببێت.",
-        );
-
-        toast.success("هەژمارەکەت بە سەرکەوتوویی دروستکرا");
-      }
     } catch (error: any) {
       console.error(error);
       const msg =
@@ -141,40 +115,7 @@ export function LoginPage() {
       </div>
 
       <div className="w-full max-w-md bg-white/80 backdrop-blur-2xl rounded-[2.5rem] p-8 shadow-2xl border border-white relative z-10 animate-in zoom-in-95 duration-500">
-        <div className="flex p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl mb-8">
-          <button
-            onClick={() => setIsLogin(true)}
-            className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${isLogin ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-          >
-            چوونەژوورەوە
-          </button>
-          <button
-            onClick={() => setIsLogin(false)}
-            className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${!isLogin ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-          >
-            خۆتۆمارکردن
-          </button>
-        </div>
-
         <form onSubmit={handleSubmit} className="space-y-5">
-          {!isLogin && (
-            <div>
-              <label className="text-sm font-black text-gray-700 block mb-2">
-                ناوی تەواو
-              </label>
-              <div className="relative">
-                <UserIcon className="w-5 h-5 absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="ناوت بنووسە"
-                  className="w-full bg-gray-50 border-2 border-transparent hover:border-gray-200 focus:border-indigo-500 rounded-2xl pr-12 pl-5 py-4 outline-none focus:ring-4 focus:ring-indigo-500/10 text-gray-900 font-bold transition-all shadow-sm"
-                />
-              </div>
-            </div>
-          )}
-
           <div>
             <label className="text-sm font-black text-gray-700 block mb-2">
               ئیمەیڵ
@@ -216,10 +157,8 @@ export function LoginPage() {
           >
             {loading ? (
               <Loader2 className="w-6 h-6 animate-spin" />
-            ) : isLogin ? (
-              "چوونەژوورەوە"
             ) : (
-              "خۆتۆمارکردن"
+              "چوونەژوورەوە"
             )}
           </button>
         </form>

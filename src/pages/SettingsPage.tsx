@@ -425,7 +425,7 @@ export function SettingsPage() {
                 />
               </div>
 
-              <div className="flex items-center pt-8">
+              <div className="flex items-center gap-3 pt-8">
                 <label className="flex items-center gap-3 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -438,6 +438,41 @@ export function SettingsPage() {
                     <p className="text-[10px] text-gray-500 font-bold">لەکاتی وەرگرتنی سکانی نوێ پەیام بنێرە</p>
                   </div>
                 </label>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!formData.telegramBotToken || !formData.telegramChatId) {
+                      toast.error("تکایە خانەکانی تێلێگرام پڕبکەرەوە");
+                      return;
+                    }
+                    const loadingId = toast.loading("پەیوەندی بە کەناڵەوە دەکرێت...");
+                    try {
+                      const resp = await fetch(`https://api.telegram.org/bot${formData.telegramBotToken}/sendMessage`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          chat_id: formData.telegramChatId,
+                          text: `🚀 <b>پەیوەندی سەرکەوتوو بوو!</b>\n\nئەمە پەیامێکی تاقیکارییە لە سیستەمی <b>MASQR</b> ەوە بۆ یەکلایبوونەوەی پەیوەندی نێوان سیستەمەکە و کەناڵی تێلێگرام.\n\n✅ <i>کەناڵەکە ئامادەیە بۆ وەرگرتنی ڕاپۆرتەکان.</i>`,
+                          parse_mode: "HTML"
+                        })
+                      });
+                      toast.dismiss(loadingId);
+                      if (resp.ok) {
+                        toast.success("پەیامی تاقیکاری بەسەرکەوتوویی نێردرا!");
+                      } else {
+                        const err = await resp.json();
+                        toast.error(`هەڵە: ${err.description || "چات ئایدی یان تۆکن نادروستە"}`);
+                      }
+                    } catch (e) {
+                      toast.dismiss(loadingId);
+                      toast.error("کێشە لە هێڵی ئینتەرنێت یان تێلێگرام هەیە.");
+                    }
+                  }}
+                  className="bg-white border rounded-xl shadow-sm text-sky-600 font-bold text-xs p-3 hover:bg-sky-50 transition-colors"
+                >
+                  تاقیکردنەوە
+                </button>
               </div>
             </div>
           </div>

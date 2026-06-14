@@ -6,7 +6,7 @@ import {
   UserCategory,
   Role,
 } from "./types";
-import { db, auth } from "./lib/firebase";
+import { db, auth, secondaryAuth } from "./lib/firebase";
 import {
   collection,
   onSnapshot,
@@ -16,7 +16,8 @@ import {
   getDoc,
   getDocs,
 } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, createUserWithEmailAndPassword } from "firebase/auth";
+import toast from "react-hot-toast";
 
 const STORAGE_KEY = "MASQR_STATE";
 
@@ -69,6 +70,82 @@ export const store = {
   initFirebase: () => {
     if (initialized) return;
     initialized = true;
+
+    // Listeners for collections
+    try {
+      onSnapshot(
+        collection(db, "users"),
+        (snapshot) => {
+          const users = snapshot.docs.map(
+            (d) => ({ id: d.id, ...d.data() }) as User,
+          );
+          store.setState({ users });
+        },
+        (error) => {
+          console.error("Firestore Users Error:", error);
+        },
+      );
+    } catch (e) {
+      console.error("Could not set up user listeners:", e);
+    }
+
+    try {
+      onSnapshot(
+        collection(db, "records"),
+        (snapshot) => {
+          const records = snapshot.docs.map(
+            (d) => ({ id: d.id, ...d.data() }) as AttendanceRecord,
+          );
+          store.setState({ records });
+        },
+        (error) => {
+          console.error("Firestore Records Error:", error);
+        },
+      );
+    } catch (e) {
+      console.error("Could not set up records listeners:", e);
+    }
+
+    try {
+      onSnapshot(
+        collection(db, "audit_logs"),
+        (snapshot) => {
+          const auditLogs = snapshot.docs
+            .map((d) => ({ id: d.id, ...d.data() }) as any)
+            .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+            .slice(0, 100);
+          store.setState({ auditLogs });
+        },
+        (error) => {
+          console.error("Firestore Audit Logs Error:", error);
+        },
+      );
+    } catch (e) {
+      console.error("Could not set up audit logs listeners:", e);
+    }
+
+    try {
+      onSnapshot(
+        doc(db, "settings", "global"),
+        (snapshot) => {
+          if (snapshot.exists()) {
+            store.setState({
+              settings: { ...defaultSettings, ...snapshot.data() } as any,
+            });
+          } else {
+            // Create default settings if not exists
+            setDoc(doc(db, "settings", "global"), defaultSettings).catch(
+              console.error,
+            );
+          }
+        },
+        (error) => {
+          console.error("Firestore Settings Error:", error);
+        },
+      );
+    } catch(e) {
+      console.error("Could not set up settings listeners", e);
+    }
 
     onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -130,84 +207,24 @@ export const store = {
 
         store.setActiveUser(firebaseUser.uid);
 
-        // Listeners for collections
-        try {
-          onSnapshot(
-            collection(db, "users"),
-          (snapshot) => {
-            const users = snapshot.docs.map(
-              (d) => ({ id: d.id, ...d.data() }) as User,
-            );
-            store.setState({ users });
-          },
-          (error) => {
-            console.error("Firestore Users Error:", error);
-          },
-        );
-        } catch (e) {
-          console.error("Could not set up user listeners:", e);
-        }
-
-        try {
-          onSnapshot(
-            collection(db, "records"),
-            (snapshot) => {
-              const records = snapshot.docs.map(
-                (d) => ({ id: d.id, ...d.data() }) as AttendanceRecord,
-              );
-              store.setState({ records });
-            },
-            (error) => {
-              console.error("Firestore Records Error:", error);
-            },
-          );
-        } catch (e) {
-          console.error("Could not set up records listeners:", e);
-        }
-
-        try {
-          onSnapshot(
-            collection(db, "audit_logs"),
-            (snapshot) => {
-              const auditLogs = snapshot.docs
-                .map((d) => ({ id: d.id, ...d.data() }) as any)
-                .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-                .slice(0, 100);
-              store.setState({ auditLogs });
-            },
-            (error) => {
-              console.error("Firestore Audit Logs Error:", error);
-            },
-          );
-        } catch (e) {
-          console.error("Could not set up audit logs listeners:", e);
-        }
-
-        try {
-          onSnapshot(
-            doc(db, "settings", "global"),
-            (snapshot) => {
-              if (snapshot.exists()) {
-                store.setState({
-                  settings: { ...defaultSettings, ...snapshot.data() } as any,
-                });
-              } else {
-                // Create default settings if not exists
-                setDoc(doc(db, "settings", "global"), defaultSettings).catch(
-                  console.error,
-                );
-              }
-            },
-            (error) => {
-              console.error("Firestore Settings Error:", error);
-            },
-          );
-        } catch(e) {
-          console.error("Could not set up settings listeners", e);
-        }
       } else {
-        store.setActiveUser(null);
-        // store.setState({ users: [], records: [] }); // Clear state on logout?
+        const storedStore = localStorage.getItem(STORAGE_KEY);
+        if (storedStore) {
+           try {
+              const parsed = JSON.parse(storedStore);
+              if (parsed.activeUserId) {
+                 const currentUid = parsed.activeUserId;
+                 // If the stored user is definitely an admin, we clear. 
+                 // We don't have users loaded maybe, so we can't reliably check 'u.role'. 
+                 // So we don't clear it automatically on null auth state right away, 
+                 // only clear if we are explicitly logging out. 
+              } else {
+                 store.setActiveUser(null);
+              }
+           } catch { store.setActiveUser(null); }
+        } else {
+           store.setActiveUser(null);
+        }
       }
     });
   },
@@ -243,10 +260,31 @@ export const store = {
   },
 
   addUser: async (user: Omit<User, "id">) => {
-    const newId = `u${Date.now()}`; // For users added manually (not via auth)
+    let newId = `u${Date.now()}`;
+    
+    // First, try to create the user in Firebase Auth if email and password are provided
+    if (user.email && user.password) {
+      try {
+        const userCredential = await createUserWithEmailAndPassword(
+          secondaryAuth,
+          user.email.trim(),
+          user.password
+        );
+        newId = userCredential.user.uid;
+      } catch (authError: any) {
+        console.error("Firebase Auth creation failed:", authError);
+        // Continue creating as a normal local Firebase DB user if auth creation fails
+        // For example if email is already in use, or password too weak. 
+        if (authError.code === "auth/email-already-in-use") {
+          toast.error("ئەم ئیمەیڵە پێشتر بەکارهاتووە لە سیستەمەکەدا", { icon: "❌" });
+          throw authError; // We should not proceed to save to DB because it's a conflict
+        }
+      }
+    }
+
     const newUser: User = { id: newId, ...user };
 
-    // 1. Update local state immediately for instant feedback and robustness
+    // 1. Update local state immediately for instant feedback
     store.setState({
       users: [...state.users, newUser],
     });
@@ -256,8 +294,16 @@ export const store = {
     // 2. Persist to Firestore asynchronously
     try {
       await setDoc(doc(db, "users", newId), newUser);
-    } catch (e) {
-      console.error("Failed to add user to Firestore, falling back to local state:", e);
+    } catch (e: any) {
+      console.error("Failed to add user to Firestore:", e);
+      if (e.code === "permission-denied" || e.message?.includes("Missing or insufficient permissions")) {
+         toast.error("کێشە لە کۆدەکانی فایربەیس هەیە! تکایە ڕێساکانی Firestore بکە بە allow read, write: if true", { duration: 8000 });
+      }
+      // Revert the local addition because it failed online
+      store.setState({
+         users: state.users.filter(u => u.id !== newId)
+      });
+      throw e;
     }
   },
 
@@ -309,12 +355,20 @@ export const store = {
     // 2. Delete from Firestore asynchronously
     try {
       await deleteDoc(doc(db, "users", id));
-    } catch (e) {
-      console.error("Failed to delete user from Firestore, falling back to local state:", e);
+    } catch (e: any) {
+      console.error("Failed to delete user from Firestore:", e);
+      if (e.code === "permission-denied" || e.message?.includes("Missing or insufficient permissions")) {
+         toast.error("تکایە دڵنیابە کە ڕێساکانی Firestore کراون بە allow read, write: if true", { duration: 8000 });
+      }
+      if (targetUser) {
+        store.setState({ users: [...state.users, targetUser] });
+      }
+      throw e;
     }
   },
 
   updateSettings: async (settings: any) => {
+    const oldSettings = state.settings;
     // 1. Update local state immediately
     store.setState({
       settings: { ...state.settings, ...settings },
@@ -325,8 +379,13 @@ export const store = {
     // 2. Save to Firestore asynchronously
     try {
       await setDoc(doc(db, "settings", "global"), settings, { merge: true });
-    } catch (e) {
-      console.error("Failed to update settings in Firestore, falling back to local state:", e);
+    } catch (e: any) {
+      console.error("Failed to update settings in Firestore:", e);
+      if (e.code === "permission-denied" || e.message?.includes("Missing or insufficient permissions")) {
+         toast.error("هەڵەی فایربەیس! ڕێساکانی داتابەیس ڕێگە بە خەزنکردنی ڕێکخستنەکان نادەن.", { duration: 6000 });
+      }
+      store.setState({ settings: oldSettings });
+      throw e;
     }
   },
 
@@ -404,6 +463,17 @@ export const store = {
 
       try {
         await setDoc(doc(db, "records", existingRecord.id), updatedRecord);
+        
+        // Auto Telegram Message
+        if (state.settings?.enableTelegramNotify && state.settings.telegramBotToken && state.settings.telegramChatId) {
+          const checkOutTime = new Date(now).toLocaleTimeString("ku-IQ", { hour: "2-digit", minute: "2-digit" });
+          const msg = `📤 <b>چوونی دەرەوە تۆمارکرا</b>\n\n👤 کارمەند: <b>${user.name}</b>\n⏱ کات: <code>${checkOutTime}</code>\n🏢 بەش: ${user.department}`;
+          fetch(`https://api.telegram.org/bot${state.settings.telegramBotToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: state.settings.telegramChatId, text: msg, parse_mode: "HTML" })
+          }).catch(console.error);
+        }
       } catch (e) {
         console.error("Failed to update record on Firestore:", e);
       }
@@ -433,6 +503,18 @@ export const store = {
 
       try {
         await setDoc(doc(db, "records", newId), newRecord);
+
+        // Auto Telegram Message
+        if (state.settings?.enableTelegramNotify && state.settings.telegramBotToken && state.settings.telegramChatId) {
+          const checkInTime = new Date(now).toLocaleTimeString("ku-IQ", { hour: "2-digit", minute: "2-digit" });
+          const statusTxt = isLate ? "⏳ دواکەوتوو" : "✅ لەکاتی خۆی";
+          const msg = `📥 <b>هاتنی دەوام تۆمارکرا</b>\n\n👤 کارمەند: <b>${user.name}</b>\n⏱ کات: <code>${checkInTime}</code>\n📊 دۆخ: ${statusTxt}\n🏢 بەش: ${user.department}`;
+          fetch(`https://api.telegram.org/bot${state.settings.telegramBotToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: state.settings.telegramChatId, text: msg, parse_mode: "HTML" })
+          }).catch(console.error);
+        }
       } catch (e) {
         console.error("Failed to save record to Firestore:", e);
       }

@@ -9,6 +9,7 @@ export function KioskScanner() {
       "تکایە وشەی نهێنی بنووسە بۆ چوونەدەرەوە لە دۆخی ئامێر (نهێنی: 0000)",
     );
     if (pin === "0000") {
+      store.setActiveUser(null);
       import("firebase/auth").then(({ signOut }) => {
         import("../lib/firebase").then(({ auth }) => {
           signOut(auth);
